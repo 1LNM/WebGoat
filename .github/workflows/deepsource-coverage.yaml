@@ -19,26 +19,50 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    permissions:
-      contents: read # for actions/checkout to fetch code
-    name: DeepSource Code Coverage
+  test-java:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
     
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+    
+    - name: Run tests with JaCoCo
+      run: mvn clean test jacoco:report
+    
+    - name: Report to DeepSource
+      run: |
+        curl https://deepsource.io/cli | sh
+        ./bin/deepsource report --analyzer test-coverage --key java --value-file target/site/jacoco/jacoco.xml
+      env:
+        DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
 
-      - name: Report test coverage to DeepSource - Java
-        uses: deepsourcelabs/test-coverage-action@master
-        with:
-          key: java
-          coverage-file: coverage-java.xml
-          dsn: ${{ secrets.DEEPSOURCE_DSN }}
-
-      - name: Report test coverage to DeepSource - Javascript
-        uses: deepsourcelabs/test-coverage-action@master
-        with:
-          key: javascript
-          coverage-file: coverage-javascript.xml
-          dsn: ${{ secrets.DEEPSOURCE_DSN }}
+  test-javascript:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+    
+    - name: Install dependencies
+      run: npm install
+    
+    - name: Run tests with coverage
+      run: npm test -- --coverage --coverageReporters=cobertura
+    
+    - name: Report to DeepSource
+      run: |
+        curl https://deepsource.io/cli | sh
+        ./bin/deepsource report --analyzer test-coverage --key javascript --value-file ./coverage/cobertura-coverage.xml
+      env:
+        DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
